@@ -20,3 +20,11 @@ source("scripts/render.R")         # standalone interactive HTML; requires Quart
 Set `selected_player_id` in `config.R`, or run `Rscript scripts/player_report.R 202331` from the project root. Player CSVs go to `output/tables/` and PNGs to `output/figures/`. Open `dist/dashboard/index.html` to select a player, compare scoring totals, switch court views, or replay shots in game ID order. The dashboard contains only scored test seasons; the default configuration has one, 2025–26.
 
 The models train on 2022–23 and 2023–24. Validation on 2024–25 selected the spatial GAM by log loss. On 219,159 held-out 2025–26 shots, log loss was 0.65277 and Brier score was 0.23017. Player identity is not a predictor. Expected points exclude free throws, and above-expected results can reflect omitted context such as defender pressure. Generated data, models, figures, and HTML are ignored by Git.
+
+## Run the tests
+
+From the project root, run `Rscript tests/test-pipeline.R` in the Terminal
+(or `source("tests/test-pipeline.R")` in RStudio after setup). The checks use
+the small synthetic dataset in [data/example](data/example/) and do not
+download NBA data or train the full models. GitHub Actions runs them on
+pushes and pull requests. See [the data guide](data/README.md) for details.
