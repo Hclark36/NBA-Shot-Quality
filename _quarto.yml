@@ -1,1 +1,14 @@
-
+project:
+  type: default
+  render: [dashboard/index.qmd]
+  execute-dir: project
+  output-dir: dist
+format:
+  html:
+    embed-resources: true
+    page-layout: full
+    css: dashboard/styles.css
+execute:
+  echo: false
+  warning: false
+  message: false

@@ -1,0 +1,19 @@
+body { background:#eef1ef; color:#173037; font-family:system-ui,sans-serif }
+main.content { max-width:1080px; margin:auto }
+.mast { padding:2.4rem 0 1.3rem; }
+.mast h1 { font-weight:800; font-size:clamp(2rem,6vw,4rem); letter-spacing:-.045em; margin:.25rem 0 }
+.eyebrow { color:#087469; font-weight:800; letter-spacing:.12em; font-size:.75rem }
+.controls,.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:12px; margin:0 0 14px }
+.controls label { font-size:.85rem; font-weight:650; }
+select,button { display:block; width:100%; margin-top:4px; padding:.55rem; border-radius:8px; border:1px solid #b9ceca; background:white; color:#173037 }
+.panel,.card { padding:1rem; margin-bottom:14px; background:white; border:1px solid #d6e2de; border-radius:12px }
+.card strong { display:block; color:#087469; font-size:1.5rem }
+.panel h2 { margin:0 0 .6rem; font-size:1.3rem }
+canvas { display:block; width:min(100%,660px); height:auto; margin:auto }
+.timeline { display:flex; align-items:center; gap:12px; flex-wrap:wrap }
+.timeline button { width:auto; background:#087469; color:white }
+.timeline input { flex:1; min-width:110px; accent-color:#087469 }
+.small,#legend { font-size:.85rem; color:#456063 }
+.bar-row { display:grid; grid-template-columns:minmax(110px, 1fr) 3fr 55px; align-items:center; gap:10px; margin:8px 0; font-size:.9rem }
+.bar-track { height:14px; background:#edf2f0; border-radius:8px }
+.bar { height:100%; border-radius:8px }

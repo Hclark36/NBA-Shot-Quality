@@ -1,1 +1,17 @@
-
+# Rebuild from the configured seasons, then evaluate the frozen selection.
+source("scripts/setup.R")
+for (name in c("fetch_shots", "prepare_shots", "split_data", "fit_models", "evaluate_models"))
+  source(file.path("R", paste0(name, ".R")))
+prepared <- prepare_shots(fetch_shots(config))
+saveRDS(prepared, file.path(config$paths$processed, "prepared_shots.rds"))
+splits <- split_data(prepared$shots, config)
+saveRDS(splits, file.path(config$paths$processed, "shot_splits.rds"))
+fitted_models <- fit_models(splits$train, config)
+saveRDS(fitted_models, file.path(config$paths$models, "shot_quality_models.rds"))
+evaluation <- evaluate_models(fitted_models, splits$validation, config)
+saveRDS(evaluation, file.path(config$paths$models, "validation_results.rds"))
+saveRDS(evaluation$selected_model, file.path(config$paths$models, "selected_shot_model.rds"))
+write.csv(evaluation$metrics, file.path(config$paths$tables, "validation_metrics.csv"), row.names = FALSE)
+ggplot2::ggsave(file.path(config$paths$figures, "validation_calibration.png"),
+  plot_calibration(evaluation), width = 9, height = 10, dpi = 200, bg = "white")
+source("scripts/test_model.R")
