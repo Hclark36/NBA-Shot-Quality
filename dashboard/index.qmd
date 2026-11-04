@@ -1,1 +1,141 @@
+---
+pagetitle: "Shot Quality Lab"
+---
 
+```{r}
+#| output: asis
+if (dir.exists(".Rlib")) .libPaths(c(normalizePath(".Rlib"), .libPaths()))
+source("config.R")
+source("R/player_results.R")
+path <- file.path(config$paths$processed, "scored_test_shots.rds")
+if (!file.exists(path)) stop("Run scripts/run.R to create scored test shots.")
+shots <- readRDS(path)
+s <- summarize_players(shots, config$min_player_attempts)
+s$player_name[s$player_id == 202331] <- "Paul George"
+# Send only the fields the explorer uses, never fitted objects.
+rows <- lapply(split(seq_len(nrow(shots)), interaction(shots$player_id, shots$season, drop = TRUE)),
+  function(i) {
+    x <- shots[i, ]
+    games <- sort(unique(x$game_id))
+    x <- x[order(x$game_id), ]
+    unname(cbind(x$x_ft, x$y_ft, round(x$make_probability, 4),
+      x$shot_made, match(x$game_id, games)))
+  })
+keys <- as.character(interaction(s$player_id, s$season, drop = TRUE))
+players <- lapply(seq_len(nrow(s)), function(i) {
+  row <- s[i, ]
+  list(id = as.character(row$player_id), season = row$season, name = row$player_name,
+    shots = rows[[keys[i]]], actual = row$actual_points, expected = row$expected_points,
+    delta = row$points_above_expected_per_100)
+})
+stopifnot(sum(vapply(players, function(p) nrow(p$shots), integer(1))) == nrow(shots))
+payload <- jsonlite::base64_enc(charToRaw(jsonlite::toJSON(players, auto_unbox = TRUE, digits = 4)))
+cat('<script id="shot-data" type="text/plain">', payload, '</script>', sep = "")
+```
+
+```{=html}
+<header class="mast">
+  <div class="eyebrow">NBA REGULAR SEASON · HELD-OUT TEST SHOTS</div>
+  <h1>Shot Quality Lab</h1>
+  <p>Explore where players shoot, what the model expected, and what actually went in.</p>
+</header>
+<div class="controls">
+  <label>Season<select id="season"></select></label>
+  <label>Player<select id="player"></select></label>
+  <label>Compare with<select id="compare"></select></label>
+  <label>Court view<select id="mode"><option value="result">Makes and misses</option><option value="quality">Expected make probability</option><option value="heat">Shot density heatmap</option></select></label>
+</div>
+<div id="cards" class="cards" aria-live="polite"></div>
+<section class="panel">
+  <div class="panel-head"><h2 id="court-title">Shot locations</h2><div id="legend"></div></div>
+  <canvas id="court" width="800" height="740" role="img" aria-label="Half court showing selected player shots"></canvas>
+  <div class="timeline"><button id="play" type="button">Play games</button><input id="frame" aria-label="Games shown" type="range" min="1" value="1"><span id="frame-label"></span></div>
+  <p id="coverage" class="small"></p>
+</section>
+<section class="panel"><h2>Field-goal scoring</h2><div id="scoring"></div>
+<p class="small">Points exclude free throws. Expected points use the league-wide model, which does not include defender distance. Full-season totals include shots outside the half-court view.</p></section>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const bytes = Uint8Array.from(atob($('shot-data').textContent), c=>c.charCodeAt(0));
+  const data = JSON.parse(new TextDecoder().decode(bytes));
+  const name = p => p.name + ' · ' + p.id;
+  const entries = data.map((p,i)=>({...p,i})).sort((a,b)=>a.name.localeCompare(b.name));
+  function options(el, items) { el.replaceChildren(...items.map(([value,label]) => new Option(label,value))); }
+  options($('season'), [...new Set(data.map(p=>p.season))].sort().reverse().map(s=>[s,s]));
+  const canvas=$('court'), ctx=canvas.getContext('2d');
+  const sx=x=>400+x*14, sy=y=>660-(y+5.25)*14;
+  const stroke='#647773';
+  function line(x,y,u,v){ctx.beginPath();ctx.moveTo(sx(x),sy(y));ctx.lineTo(sx(u),sy(v));ctx.stroke();}
+  function circle(x,y,r,start=0,end=2*Math.PI){ctx.beginPath();ctx.arc(sx(x),sy(y),r*14,start,end);ctx.stroke();}
+  function floor(){
+    ctx.clearRect(0,0,800,740);ctx.fillStyle='#faf5e9';ctx.strokeStyle=stroke;ctx.lineWidth=2;
+    ctx.fillRect(sx(-25),sy(41.75),700,658);ctx.strokeRect(sx(-25),sy(41.75),700,658);
+    ctx.strokeRect(sx(-8),sy(13.75),224,266);circle(0,13.75,6);circle(0,0,.75);
+    line(-3,-1.25,3,-1.25);
+    const a=Math.acos(22/23.75), h=Math.sqrt(23.75**2-22**2);
+    circle(0,0,23.75,Math.PI+a,2*Math.PI-a);line(-22,-5.25,-22,h);line(22,-5.25,22,h);
+  }
+  let timer=null;
+  const picked=()=>data[Number($('player').value)];
+  function stop(){clearInterval(timer);timer=null;$('play').textContent='Play games';}
+  function render(){
+    const p=picked(), n=Number($('frame').value), mode=$('mode').value;
+    const show=p.shots.filter(s=>s[4]<=n && s[0]>=-25 && s[0]<=25 && s[1]>=-5.25 && s[1]<=41.75);
+    floor();
+    if(mode==='heat'){
+      const bins=new Map();
+      for(const [x,y] of show){const ix=Math.min(19,Math.floor((x+25)/2.5)), iy=Math.min(18,Math.floor((y+5.25)/2.5));const key=ix+','+iy;bins.set(key,(bins.get(key)||0)+1);}
+      const max=Math.max(1,...bins.values());
+      for(const [key,count] of bins){const [ix,iy]=key.split(',').map(Number);ctx.fillStyle='rgba(8,116,105,'+(.12+.78*count/max)+')';ctx.fillRect(sx(-25+ix*2.5),sy(Math.min(41.75,-5.25+(iy+1)*2.5)),34,Math.min(34,sy(-5.25+iy*2.5)-sy(41.75)));}
+      $('legend').textContent='Darker tiles show more attempts within this view.';
+    }else{
+      for(const [x,y,prob,made] of show){
+        ctx.fillStyle=mode==='quality'?'hsla('+Math.round(255-220*prob)+',75%,48%,.76)':made?'rgba(8,127,120,.68)':'rgba(206,114,49,.68)';
+        ctx.beginPath();ctx.arc(sx(x),sy(y),3.5,0,2*Math.PI);ctx.fill();
+      }
+      $('legend').textContent=mode==='quality'?'Purple = lower make probability · gold = higher':'Teal = made · orange = missed';
+    }
+    $('court-title').textContent=p.name+' · '+p.season;
+    $('frame-label').textContent=n+' of '+$('frame').max+' games';
+    $('coverage').textContent=show.length.toLocaleString()+' visible attempts · replay uses game ID order.';
+  }
+  function summary(){
+    const p=picked(), c=$('compare').value===''?null:data[Number($('compare').value)];
+    const signed=x=>(x>=0?'+':'')+x.toFixed(1);
+    $('cards').replaceChildren(...[['Attempts',p.shots.length.toLocaleString()],['Actual points',p.actual.toFixed(0)],['Expected points',p.expected.toFixed(1)],['Points above expected / 100',signed(p.delta)]].map(([label,val])=>{
+      const d=document.createElement('div');d.className='card';const b=document.createElement('strong');b.textContent=val;d.append(b,label);return d;
+    }));
+    const rows=[p,...(c?[c]:[])].flatMap(q=>[[q.name+' · actual',q.actual,'#087469'],[q.name+' · expected',q.expected,'#6b73a2']]);
+    const max=Math.max(1,...rows.map(r=>r[1]));
+    $('scoring').replaceChildren(...rows.map(([label,val,color])=>{
+      const row=document.createElement('div');row.className='bar-row';
+      const track=document.createElement('div');track.className='bar-track';
+      const bar=document.createElement('div');bar.className='bar';bar.style.width=(100*val/max)+'%';bar.style.background=color;
+      track.append(bar);row.append(label,track,val.toFixed(1));return row;
+    }));
+  }
+  function reset(){
+    stop(); const p=picked();
+    $('frame').max=p.shots[p.shots.length-1][4];$('frame').value=$('frame').max;
+    summary();render();
+  }
+  function roster(){
+    const list=entries.filter(p=>p.season===$('season').value);
+    options($('player'),list.map(p=>[p.i,name(p)]));
+    options($('compare'),[['','None'],...list.map(p=>[p.i,name(p)])]);
+    const pg=list.find(p=>p.id==='202331'); if(pg) $('player').value=pg.i;
+    reset();
+  }
+  $('season').onchange=roster;$('player').onchange=reset;$('compare').onchange=summary;
+  $('mode').onchange=render;$('frame').oninput=()=>{stop();render();};
+  $('play').onclick=()=>{
+    if(timer){stop();return;}
+    $('frame').value=1;$('play').textContent='Pause';render();
+    timer=setInterval(()=>{if(Number($('frame').value)>=Number($('frame').max)){stop();return;}
+      $('frame').value=Number($('frame').value)+1;render();},150);
+  };
+  roster();
+})();
+</script>
+```
